@@ -16,16 +16,33 @@ import { CceeCurtailmentTab } from './components/CceeCurtailmentTab.tsx';
 import { CadastralGridTab } from './components/CadastralGridTab.tsx';
 import { DossierModal } from './components/DossierModal.tsx';
 import { AuditSummaryModal } from './components/AuditSummaryModal.tsx';
-import { TreemapAsset } from './types.ts';
+import { AuthModal } from './components/AuthModal.tsx';
+import { TreemapAsset, AuthUser } from './types.ts';
 import { ShieldCheck, Database, Radio, HelpCircle } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('treemap');
   const [selectedAsset, setSelectedAsset] = useState<TreemapAsset | null>(null);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState<boolean>(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [capacidadeTotalMw, setCapacidadeTotalMw] = useState<number>(265940);
 
+  // Estado de Autenticação Oficial (CCEE / ONS / ANEEL vs Voyeur)
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    try {
+      const saved = localStorage.getItem('mex_auth_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [authToken, setAuthToken] = useState<string | null>(() => {
+    return localStorage.getItem('mex_auth_token') || null;
+  });
+
   useEffect(() => {
+    // Busca status do ETL
     fetch('/api/etl/status')
       .then(res => res.json())
       .then(data => {
@@ -34,7 +51,45 @@ export default function App() {
         }
       })
       .catch(err => console.error('Erro ao buscar status:', err));
+
+    // Se não tiver usuário salvo, inicializa automaticamente com o agente padrão ccee.xai pré-cadastrado
+    if (!currentUser) {
+      fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'ccee.xai', password: 'xai2026!' })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.usuario && data.token) {
+            handleLoginSuccess(data.usuario, data.token);
+          }
+        })
+        .catch(err => console.error('Erro ao carregar sessão inicial:', err));
+    }
   }, []);
+
+  const handleLoginSuccess = (user: AuthUser, token: string) => {
+    setCurrentUser(user);
+    setAuthToken(token);
+    try {
+      localStorage.setItem('mex_auth_user', JSON.stringify(user));
+      localStorage.setItem('mex_auth_token', token);
+    } catch (e) {
+      console.warn('LocalStorage error:', e);
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setAuthToken(null);
+    try {
+      localStorage.removeItem('mex_auth_user');
+      localStorage.removeItem('mex_auth_token');
+    } catch (e) {
+      console.warn('LocalStorage error:', e);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-slate-950">
@@ -44,7 +99,9 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         openAuditModal={() => setIsAuditModalOpen(true)}
+        openAuthModal={() => setIsAuthModalOpen(true)}
         capacidadeTotalMw={capacidadeTotalMw}
+        currentUser={currentUser}
       />
 
       {/* Conteúdo Principal */}
@@ -78,7 +135,11 @@ export default function App() {
         )}
 
         {activeTab === 'ccee_curtailment' && (
-          <CceeCurtailmentTab />
+          <CceeCurtailmentTab
+            currentUser={currentUser}
+            authToken={authToken}
+            openAuthModal={() => setIsAuthModalOpen(true)}
+          />
         )}
 
         {activeTab === 'rede_cadastral' && (
@@ -96,6 +157,15 @@ export default function App() {
       <AuditSummaryModal
         isOpen={isAuditModalOpen}
         onClose={() => setIsAuditModalOpen(false)}
+      />
+
+      {/* Modal de Autenticação Oficial & Voyeur */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        currentUser={currentUser}
+        onLoginSuccess={handleLoginSuccess}
+        onLogout={handleLogout}
       />
 
       {/* Rodapé Institucional e Fontes Oficiais */}

@@ -7,28 +7,34 @@ import {
   Box, 
   Bot, 
   ShieldCheck, 
-  Cpu, 
   Radio, 
-  CheckCircle2,
   Building2,
-  Network
+  Network,
+  Eye,
+  KeyRound,
+  UserCheck
 } from 'lucide-react';
+import { AuthUser } from '../types';
 
 interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   openAuditModal: () => void;
+  openAuthModal: () => void;
   capacidadeTotalMw: number;
+  currentUser: AuthUser | null;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   openAuditModal,
-  capacidadeTotalMw
+  openAuthModal,
+  capacidadeTotalMw,
+  currentUser
 }) => {
   const tabs = [
-    { id: 'treemap', label: '1. SIN GD + GC (Treemap)', icon: BarChart3 },
+    { id: 'treemap', label: '1. SIN GD + GC (Finviz Treemap)', icon: BarChart3 },
     { id: 'ons_dessem', label: '2. ONS & DESSEM Operacional', icon: Radio },
     { id: 'etl_sql', label: '3. Simulador ETL & SQL (SQLite3)', icon: Database },
     { id: 'calculadora', label: '4. Calculadora Lei 14.300', icon: Calculator },
@@ -63,12 +69,55 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* User Auth Badge */}
+          {currentUser ? (
+            <button
+              onClick={openAuthModal}
+              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-medium border transition cursor-pointer ${
+                currentUser.isVoyeur
+                  ? 'bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 border-zinc-600'
+                  : currentUser.orgao === 'CCEE'
+                    ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40'
+                    : currentUser.orgao === 'ONS'
+                      ? 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border-blue-500/40'
+                      : 'bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border-purple-500/40'
+              }`}
+              title="Clique para alternar usuário ou ver credenciais oficiais"
+            >
+              {currentUser.isVoyeur ? (
+                <>
+                  <Eye className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Modo Voyeur (Somente Leitura)</span>
+                </>
+              ) : (
+                <>
+                  <UserCheck className="w-3.5 h-3.5 text-amber-400" />
+                  <span>
+                    <strong className="font-mono">{currentUser.orgao}:</strong> {currentUser.nome_completo.split(' ')[0]}
+                  </span>
+                  <span className="font-mono text-[10px] text-zinc-400 hidden md:inline">
+                    ({currentUser.registro_oficial})
+                  </span>
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={openAuthModal}
+              className="flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition text-xs font-medium cursor-pointer"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>Login Oficial / Voyeur</span>
+            </button>
+          )}
+
           <button
             onClick={openAuditModal}
             className="flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition text-xs font-medium cursor-pointer"
           >
             <ShieldCheck className="w-3.5 h-3.5" />
-            Auditoria Geo & Cabines (Parecer Oficial)
+            <span className="hidden sm:inline">Auditoria Geo & Cabines</span>
+            <span className="sm:hidden">Auditoria</span>
           </button>
         </div>
       </div>

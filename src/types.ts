@@ -1,5 +1,6 @@
 export interface TreemapAsset {
   id: string;
+  ticker: string;
   nome: string;
   categoria: string;
   tipo: string;
@@ -8,6 +9,15 @@ export interface TreemapAsset {
   potencia_mw: number;
   conexoes_total?: number;
   variacao_periodo: string;
+  variacao_1h: string;
+  variacao_1d: string;
+  variacao_1w: string;
+  fator_capacidade: string;
+  submercado: string;
+  tensao_kv: string;
+  despacho_status: string;
+  custo_tarifa: string;
+  geracao_estimada_gwh_ano: number;
   status_regulatório: string;
   operadora: string;
   ano_inicio: number;
@@ -19,6 +29,32 @@ export interface TreemapAsset {
     impacto_dessem: string;
     geolocalizacao_auditada: string;
   };
+}
+
+export interface AuthUser {
+  id: string;
+  username: string;
+  nome_completo: string;
+  orgao: 'CCEE' | 'ONS' | 'ANEEL' | 'VOYEUR';
+  categoria: string;
+  registro_oficial: string;
+  cargo: string;
+  submercado: string;
+  isVoyeur: boolean;
+  permissoes: string[];
+  token: string;
+}
+
+export interface PreCadastradoUser {
+  id: string;
+  username: string;
+  nome_completo: string;
+  orgao: 'CCEE' | 'ONS' | 'ANEEL' | 'VOYEUR';
+  categoria: string;
+  registro_oficial: string;
+  cargo: string;
+  submercado: string;
+  isVoyeur: boolean;
 }
 
 export interface CargaPonto {

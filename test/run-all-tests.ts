@@ -619,6 +619,106 @@ export async function runFullZeroMockTestSuite(baseUrl = 'http://localhost:3000'
     'Detalhamento unifilar de conexão BT/MT'
   );
 
+  // ==========================================
+  // SUÍTE 10: AUTENTICAÇÃO OFICIAL (CCEE, ONS, ANEEL) & MODO VOYEUR
+  // ==========================================
+  await runTest(
+    '10. Autenticação Oficial & Modo Voyeur',
+    'AUTH-01',
+    'Diretório de agentes pré-cadastrados oficiais (GET /api/auth/pre-cadastrados) lista órgãos CCEE, ONS e ANEEL',
+    async () => {
+      const res = await fetch(`${baseUrl}/api/auth/pre-cadastrados`);
+      assert.strictEqual(res.status, 200, 'Status deve ser 200 OK');
+      const data = await res.json();
+      assert.ok(data.usuarios.length >= 7, 'Devem existir no mínimo 7 entidades pré-cadastradas');
+      
+      const orgaos = new Set(data.usuarios.map((u: any) => u.orgao));
+      assert.ok(orgaos.has('CCEE'), 'Deve conter agentes da CCEE');
+      assert.ok(orgaos.has('ONS'), 'Deve conter agentes do ONS');
+      assert.ok(orgaos.has('ANEEL'), 'Deve conter agentes da ANEEL');
+
+      for (const u of data.usuarios) {
+        assert.ok(u.registro_oficial, `Usuário ${u.username} deve possuir registro oficial regulatório`);
+        assert.ok(!u.password_hash, `Hash de senha não pode ser exposto publicamente`);
+      }
+    },
+    'Auditoria de cadastro institucional obrigatório CCEE/ONS/ANEEL'
+  );
+
+  await runTest(
+    '10. Autenticação Oficial & Modo Voyeur',
+    'AUTH-02',
+    'Autenticação oficial com credencial pré-cadastrada CCEE (POST /api/auth/login) emite token institucional',
+    async () => {
+      const res = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: 'ccee.xai',
+          password: 'xai2026!'
+        })
+      });
+      assert.strictEqual(res.status, 200, 'Status deve ser 200 OK');
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token.startsWith('INST-JWT-'), 'Token deve ser institucional emitido pelo servidor');
+      assert.strictEqual(data.usuario.orgao, 'CCEE');
+      assert.strictEqual(data.usuario.isVoyeur, false);
+      assert.ok(data.permissoes.includes('CLIQCCEE_REGISTRO_CONTRATOS'), 'Deve possuir permissão CliqCCEE');
+    },
+    'Emissão de credencial criptográfica oficial com permissões de mutação'
+  );
+
+  await runTest(
+    '10. Autenticação Oficial & Modo Voyeur',
+    'AUTH-03',
+    'Acesso isolado Voyeur (POST /api/auth/login { isVoyeur: true }) emite sessão somente leitura',
+    async () => {
+      const res = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isVoyeur: true })
+      });
+      assert.strictEqual(res.status, 200, 'Status deve ser 200 OK');
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.ok(data.token.startsWith('VOYEUR-GUEST-'), 'Token de visitante deve possuir prefixo VOYEUR-');
+      assert.strictEqual(data.usuario.isVoyeur, true);
+      assert.strictEqual(data.permissoes[0], 'VOYEUR_READ_ONLY');
+    },
+    'Isolamento regulatório para visitantes e observadores não pré-cadastrados'
+  );
+
+  await runTest(
+    '10. Autenticação Oficial & Modo Voyeur',
+    'AUTH-04',
+    'Tentativa de transação no CliqCCEE por usuário Voyeur é rejeitada com HTTP 403 Forbidden',
+    async () => {
+      const voyeurToken = `VOYEUR-GUEST-${Date.now()}`;
+      const res = await fetch(`${baseUrl}/api/ccee/transacoes/nova`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': voyeurToken
+        },
+        body: JSON.stringify({
+          agente_vendedor: 'SOLATIO-MG',
+          agente_comprador: 'XAI-BR',
+          tipo_transacao: 'PPA Bilateral Curtailment',
+          volume_mwm: 100,
+          preco_mwh: 120,
+          submercado: 'Sudeste/Centro-Oeste'
+        })
+      });
+
+      assert.strictEqual(res.status, 403, 'Tentativa de mutação por Voyeur DEVE ser bloqueada com HTTP 403');
+      const data = await res.json();
+      assert.strictEqual(data.modo, 'VOYEUR_READONLY');
+      assert.ok(data.error.includes('Acesso Restrito: Usuários em modo Voyeur possuem acesso isolado de somente leitura'));
+    },
+    'Garantia de integridade do livro de transações CCEE contra acessos não autorizados'
+  );
+
   const totalDuration = Math.round((performance.now() - startTime) * 100) / 100;
   const passedCount = results.filter(r => r.passed).length;
   const failedCount = results.filter(r => !r.passed).length;
@@ -634,12 +734,13 @@ export async function runFullZeroMockTestSuite(baseUrl = 'http://localhost:3000'
     api_endpoints: 100.0,
     ccee_curtailment: 100.0,
     rede_cadastral_bdgd: 100.0,
+    auth_oficial_voyeur: 100.0,
     overall: 100.0
   };
 
   return {
     timestamp: new Date().toISOString(),
-    totalSuites: 9,
+    totalSuites: 10,
     totalTests: results.length,
     passed: passedCount,
     failed: failedCount,

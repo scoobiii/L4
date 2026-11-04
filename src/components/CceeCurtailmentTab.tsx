@@ -17,8 +17,11 @@ import {
   Activity, 
   Server, 
   Clock, 
-  AlertTriangle 
+  AlertTriangle,
+  Eye 
 } from 'lucide-react';
+
+import { AuthUser } from '../types.ts';
 
 interface CceeAgente {
   id: string;
@@ -65,13 +68,24 @@ interface CurtailmentStats {
   };
 }
 
-export const CceeCurtailmentTab: React.FC = () => {
+interface CceeCurtailmentTabProps {
+  currentUser?: AuthUser | null;
+  authToken?: string | null;
+  openAuthModal?: () => void;
+}
+
+export const CceeCurtailmentTab: React.FC<CceeCurtailmentTabProps> = ({
+  currentUser,
+  authToken,
+  openAuthModal
+}) => {
   const [agentes, setAgentes] = useState<CceeAgente[]>([]);
   const [activeAgente, setActiveAgente] = useState<CceeAgente | null>(null);
   const [selectedAgenteId, setSelectedAgenteId] = useState<string>('AG-XAI-BR-01');
   const [transacoes, setTransacoes] = useState<CceeTransacao[]>([]);
   const [curtailmentStats, setCurtailmentStats] = useState<CurtailmentStats | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   // Parâmetros do Deal Studio xAI Data Center
   const [potenciaDcMw, setPotenciaDcMw] = useState<number>(250);
@@ -134,11 +148,25 @@ export const CceeCurtailmentTab: React.FC = () => {
   };
 
   const handleRegisterDeal = async () => {
+    setErrorMessage('');
+
+    if (currentUser?.isVoyeur) {
+      setErrorMessage('Acesso Restrito: Usuários em modo Voyeur possuem acesso isolado de somente leitura. Para formalizar contratos de Curtailment no CliqCCEE, faça login com uma credencial pré-cadastrada oficial na CCEE/ONS/ANEEL.');
+      return;
+    }
+
     setRegisteringDeal(true);
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (authToken) {
+        headers['Authorization'] = authToken;
+      }
+
       const res = await fetch('/api/ccee/curtailment-xai-deal', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           parque_gerador: parqueGerador,
           submercado,
@@ -147,14 +175,21 @@ export const CceeCurtailmentTab: React.FC = () => {
           modelo_conexao: modeloConexao
         })
       });
+
       const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao registrar deal no CliqCCEE');
+      }
+
       setDealResult(data.deal);
 
       // Recarrega transações para ver a nova no CliqCCEE
       const txRes = await fetch('/api/ccee/transacoes');
       const txData = await txRes.json();
       setTransacoes(txData.transacoes || []);
-    } catch (err) {
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Erro ao registrar deal de curtailment.');
       console.error('Erro ao registrar deal de curtailment:', err);
     } finally {
       setRegisteringDeal(false);
@@ -163,7 +198,45 @@ export const CceeCurtailmentTab: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      
+      {/* Banner de Modo Voyeur (Isolamento de Leitura) */}
+      {currentUser?.isVoyeur && (
+        <div className="p-4 rounded-2xl bg-sky-950/40 border border-sky-800/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-sky-200">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-sky-500/20 text-sky-400 shrink-0">
+              <Eye className="w-5 h-5" />
+            </div>
+            <div>
+              <strong className="text-sky-300 font-bold block text-sm">Acesso Isolado de Somente Leitura (Modo Voyeur)</strong>
+              <span>Você pode auditar livremente todos os dados do SIN e simular estruturas de Curtailment, mas o envio de contratos ao CliqCCEE está restrito a agentes oficiais pré-cadastrados.</span>
+            </div>
+          </div>
+          {openAuthModal && (
+            <button
+              onClick={openAuthModal}
+              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs whitespace-nowrap transition cursor-pointer shadow-md shadow-amber-500/20"
+            >
+              Autenticar Agente Oficial CCEE
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Alerta de Erro de Permissão / Validação */}
+      {errorMessage && (
+        <div className="p-4 rounded-xl bg-rose-950/50 border border-rose-800/80 text-rose-300 text-xs flex items-center justify-between gap-3 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button 
+            onClick={() => setErrorMessage('')}
+            className="text-rose-400 hover:text-white font-bold p-1 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* 1. Barra de Identidade e Login de Agente CCEE */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between pb-4 border-b border-slate-800 gap-4">
@@ -483,14 +556,24 @@ export const CceeCurtailmentTab: React.FC = () => {
         </div>
 
         {/* Botão de Registro do Acordo */}
-        <div className="flex justify-end">
+        <div className="flex flex-col sm:flex-row items-center justify-end gap-3">
+          {currentUser?.isVoyeur && (
+            <span className="text-[11px] text-zinc-400 font-mono flex items-center gap-1.5 bg-zinc-950 px-3 py-1.5 rounded-xl border border-zinc-800">
+              <Eye className="w-3.5 h-3.5 text-zinc-400" />
+              <span>Modo Voyeur: Mutação bloqueada. Clique para simular resposta regulatória.</span>
+            </span>
+          )}
           <button
             onClick={handleRegisterDeal}
             disabled={registeringDeal}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 text-xs font-bold transition cursor-pointer shadow-lg shadow-cyan-500/20 disabled:opacity-50"
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold transition cursor-pointer shadow-lg disabled:opacity-50 ${
+              currentUser?.isVoyeur 
+                ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700' 
+                : 'bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 shadow-cyan-500/20'
+            }`}
           >
-            <Sparkles className="w-4 h-4 fill-slate-950" />
-            {registeringDeal ? 'Estruturando Contrato CliqCCEE...' : 'Estruturar & Registrar Deal xAI no CliqCCEE'}
+            <Sparkles className="w-4 h-4 fill-current" />
+            {registeringDeal ? 'Estruturando Contrato CliqCCEE...' : currentUser?.isVoyeur ? 'Simular Validação CliqCCEE (Modo Voyeur)' : 'Estruturar & Registrar Deal xAI no CliqCCEE'}
           </button>
         </div>
 
