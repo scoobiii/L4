@@ -1,0 +1,6 @@
+{
+  "name": "Painel Nacional GD & GC — MEx Energia",
+  "description": "Plataforma Integrada de Auditoria Regulatória, Geração Distribuída (MMGD) e Centralizada (GC) com SQLite3 nativo, DESSEM/ONS, ANEEL, Gêmeo Digital 3D/AR e IA Gemini.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
